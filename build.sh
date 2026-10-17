@@ -72,6 +72,7 @@ SEPOLICY_ONLY=0
 CLEAN_MODE="clean"   # clean | installclean
 DO_MEMGUARD=1
 DO_PUBLISH=1
+DO_CAMERA_CHECK=1
 BUILD_TYPE=""
 
 log() { printf '%s\n' "$*"; }
@@ -89,6 +90,7 @@ Usage: ./$SCRIPT_NAME [eng|userdebug|user] [options]
   -i, --installclean  skip the 'rm -rf out/'
   -m, --no-memguard   single attempt, no retry loop
       --no-publish    build only, don't touch $WEB_ROOT
+      --no-camera-check  [CAMERA] skip the vendor/oplus/camera(-blobs) check
   -j N                override job count (default: \$(nproc) = $JOBS)
   -h, --help          this help
 
@@ -125,6 +127,7 @@ while [[ $# -gt 0 ]]; do
         -i|--installclean) CLEAN_MODE="installclean"; shift ;;
         -m|--no-memguard) DO_MEMGUARD=0; shift ;;
         --no-publish) DO_PUBLISH=0; shift ;;
+        --no-camera-check) DO_CAMERA_CHECK=0; shift ;;
         -j)
             JOBS="$2"
             if ! [[ "$JOBS" =~ ^[0-9]+$ ]]; then
@@ -273,6 +276,50 @@ run_sepolicy() {
 }
 
 # --------------------------------------------------------------------------
+# [CAMERA] — vendor/oplus/camera is open_oplus_camera (configuration and
+# patches, no blobs); the patched blobs it builds from are a separate tree,
+# vendor/oplus/camera-blobs, synced from the private open_oplus_camera_blobs
+# repo or copied in by hand. The device trees inherit opluscamera.mk with
+# inherit-product-if-exists, so a missing tree would otherwise build a ROM
+# without the camera instead of failing.
+# --------------------------------------------------------------------------
+check_camera_blobs() {
+    local cam="$ROM_ROOT/vendor/oplus/camera" blobs="$ROM_ROOT/vendor/oplus/camera-blobs"
+    local f missing=0
+
+    if [[ ! -f "$cam/opluscamera.mk" ]]; then
+        log_tagged CAMERA "Error: $cam/opluscamera.mk not found — sync vendor/oplus/camera (open_oplus_camera)."
+        return 1
+    fi
+    if [[ -d "$cam/proprietary" || ! -d "$cam/patches" ]]; then
+        log_tagged CAMERA "Error: $cam is the old vendor_oplus_camera, not open_oplus_camera."
+        log_tagged CAMERA "Update scripts/ to the Tonybytelabs manifest and repo sync vendor/oplus/camera."
+        return 1
+    fi
+    for f in camera-blobs-vendor.mk Android.bp; do
+        if [[ ! -f "$blobs/$f" ]]; then
+            log_tagged CAMERA "Error: $blobs/$f not found — sync or copy in vendor/oplus/camera-blobs."
+            return 1
+        fi
+    done
+
+    # Every blob the generated makefiles name, whole or as .partNN pieces
+    # (joined by vendor/oplus/camera/vendorsetup.sh when envsetup is sourced).
+    while IFS= read -r f; do
+        if [[ ! -f "$blobs/$f" && ! -f "$blobs/$f.part00" ]]; then
+            log_tagged CAMERA "missing: vendor/oplus/camera-blobs/$f"
+            missing=$(( missing + 1 ))
+        fi
+    done < <(grep -ohE 'proprietary/[^":, \\]+' "$blobs/Android.bp" "$blobs/camera-blobs-vendor.mk" | sort -u)
+    if (( missing > 0 )); then
+        log_tagged CAMERA "Error: $missing camera blob(s) missing from vendor/oplus/camera-blobs."
+        return 1
+    fi
+    log_tagged CAMERA "open_oplus_camera and $(find "$blobs/proprietary" -type f | wc -l) blob files present."
+    return 0
+}
+
+# --------------------------------------------------------------------------
 # [BUILD] — one attempt. $1 is the clean mode: clean | installclean.
 # --------------------------------------------------------------------------
 run_build_attempt() {
@@ -387,6 +434,14 @@ if [[ "$DO_SEPOLICY" -eq 1 ]]; then
     if [[ $sepolicy_rc -ne 0 ]]; then
         log "Aborting: sepolicy check failed, not starting the full build."
         exit $sepolicy_rc
+    fi
+fi
+
+if [[ "$DO_CAMERA_CHECK" -eq 1 ]]; then
+    check_camera_blobs 2>&1 | tee -a "$BUILD_LOG"
+    if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
+        log "Aborting: camera check failed (use --no-camera-check to build without it)."
+        exit 1
     fi
 fi
 
