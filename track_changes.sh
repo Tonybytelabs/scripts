@@ -508,9 +508,33 @@ cmd_clean_src() {
 # wipes the local working copy AND the repo-tool internal object dirs
 # for one project, so the next sync re-fetches it from scratch.
 # DESTRUCTIVE — only ever called when the user passed -f/--force.
+# A manifest project whose folder exists but has no .git was copied in by hand
+# (e.g. vendor/oplus/camera-blobs, the private camera blob repo, scp'd onto a
+# server that can't fetch it). repo would try to replace it and fail, and -f
+# would wipe it, so syncs skip it and clean_project refuses it.
+is_hand_copied() {
+  [[ "$REPO_MODE" == "repo" && -d "./$1" && ! -e "./$1/.git" ]]
+}
+
+# Prints the given paths minus hand-copied ones; names each skipped one on stderr.
+without_hand_copied() {
+  local p
+  for p in "$@"; do
+    if is_hand_copied "$p"; then
+      echo "${C_YELLOW}==> skipping '$p': copied in by hand (no .git), left as it is${C_RESET}" >&2
+    else
+      printf '%s\n' "$p"
+    fi
+  done
+}
+
 clean_project() {
   local path="$1" name
   name="$(project_name_for "$path")"
+  if is_hand_copied "$path"; then
+    echo "${C_RED}==> not wiping '$path': copied in by hand (no .git), repo cannot restore it${C_RESET}"
+    return 1
+  fi
   # local_manifest.xml is a symlink into this project (see --device): with the
   # project gone repo cannot parse the manifest, so it could never be re-synced.
   local manifest_target
@@ -785,6 +809,11 @@ cmd_sync() {
 
   local sync_rc=0
   if [[ "$REPO_MODE" == "repo" ]]; then
+    if [[ -n "$TARGET_REPO" ]] && is_hand_copied "$TARGET_REPO"; then
+      echo "${C_YELLOW}==> '${TARGET_REPO}' was copied in by hand (no .git); not syncing it. Remove the folder to let repo fetch it.${C_RESET}"
+      rm -f "$BEFORE_SNAPSHOT" "$AFTER_SNAPSHOT"
+      return 0
+    fi
     if [[ -n "$TARGET_REPO" ]]; then
       echo "${C_BOLD}==> Running: repo sync ${SYNC_ARGS[*]} ${TARGET_REPO}${C_RESET}"
       local sync_out
@@ -823,9 +852,21 @@ cmd_sync() {
         esac
       fi
     else
-      echo "${C_BOLD}==> Running: repo sync ${SYNC_ARGS[*]}${C_RESET}"
+      # With a hand-copied project present, sync every other project by name
+      # instead of the whole manifest.
+      local -a SYNC_PROJECTS=()
+      local -a all_paths=()
+      mapfile -t all_paths < <(repo list -p 2>/dev/null)
+      local p
+      for p in "${all_paths[@]}"; do
+        if is_hand_copied "$p"; then
+          mapfile -t SYNC_PROJECTS < <(without_hand_copied "${all_paths[@]}")
+          break
+        fi
+      done
+      echo "${C_BOLD}==> Running: repo sync ${SYNC_ARGS[*]}${SYNC_PROJECTS[*]:+ (${#SYNC_PROJECTS[@]} projects)}${C_RESET}"
       local sync_out
-      run_streamed sync_out repo sync "${SYNC_ARGS[@]}"
+      run_streamed sync_out repo sync "${SYNC_ARGS[@]}" "${SYNC_PROJECTS[@]}"
       sync_rc=$?
       if [[ $sync_rc -ne 0 && "$FORCE" -eq 1 ]]; then
         local verdict
@@ -1252,7 +1293,7 @@ cmd_sync_dts() {
   exec > >(tee -a "$LOG_FILE") 2>&1
 
   discover_repos   # populates REPO_NAMES for every project repo knows about
-  REPO_PATHS=("${DTS_PATHS[@]}")   # scope down to just the manifest's own projects
+  mapfile -t REPO_PATHS < <(without_hand_copied "${DTS_PATHS[@]}")   # the manifest's own projects
 
   echo "${C_BOLD}==> device-tree sync: ${#REPO_PATHS[@]} project(s) from local_manifest.xml${C_RESET}"
   local p
