@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # otauploader.sh — push a finished AxionOS build + recovery images to
 # SourceForge (sftp) and/or pixeldrain (filesystem API), then publish its
-# Updater-app OTA manifest to the varakumar01/scripts repo. Run from the
+# Updater-app OTA manifest to the Tonybytelabs/scripts repo. Run from the
 # build root (the dir containing `out/`).
 #
 # Secrets (PIXELDRAIN_API_KEY, SSHPASS, PIXELDRAIN_RETENTION) are read from
