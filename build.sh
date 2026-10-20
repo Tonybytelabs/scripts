@@ -293,7 +293,7 @@ check_camera_blobs() {
     fi
     if [[ -d "$cam/proprietary" || ! -d "$cam/patches" ]]; then
         log_tagged CAMERA "Error: $cam is the old vendor_oplus_camera, not open_oplus_camera."
-        log_tagged CAMERA "Update scripts/ to the Tonybytelabs manifest and repo sync vendor/oplus/camera."
+        log_tagged CAMERA "Update scripts/ to the varakumar02 manifest and repo sync vendor/oplus/camera."
         return 1
     fi
     for f in camera-blobs-vendor.mk Android.bp; do
