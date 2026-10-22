@@ -19,7 +19,7 @@ DOWNLOAD_BASE_URL="https://ferrari.serverhive.in/tony"   # <- edit if it changes
 WEB_ROOT="/var/www/html/tony"                             # nothing outside this is ever touched
 
 DEVICE="lemonade"
-GMS_VARIANT="core"
+GMS_VARIANT="core"            # default GMS variant; override with -g/--gms
 DEFAULT_BUILD_TYPE="eng"
 JOBS="$(nproc)"
 
@@ -83,6 +83,7 @@ usage() {
 Usage: ./$SCRIPT_NAME [eng|userdebug|user] [options]
 
   -d, --device NAME   target device (default: $DEVICE), e.g. lemonade, lemonadep
+  -g, --gms VARIANT   GMS variant (default: $GMS_VARIANT), e.g. core, gapps, vanilla, foss
   -f, --force         [MEMGUARD] retry on ANY failure, not just memory kills
       --sepolicy      [SEPOLICY] run the sepolicy check before the full build
       --sepolicy-only [SEPOLICY] run only the sepolicy check, then exit
@@ -116,6 +117,14 @@ while [[ $# -gt 0 ]]; do
             DEVICE="$2"
             if [[ -z "$DEVICE" ]]; then
                 log "Error: -d/--device requires a name."
+                exit 1
+            fi
+            shift 2
+            ;;
+        -g|--gms)
+            GMS_VARIANT="$2"
+            if [[ -z "$GMS_VARIANT" ]]; then
+                log "Error: -g/--gms requires a variant name."
                 exit 1
             fi
             shift 2
@@ -520,6 +529,7 @@ fi
     echo "         build.sh summary"
     echo "=========================================="
     echo "Build type   : $BUILD_TYPE"
+    echo "GMS variant  : $GMS_VARIANT"
     echo "Attempts     : $attempt"
     printf 'Elapsed      : %02d:%02d:%02d\n' $((elapsed/3600)) $((elapsed%3600/60)) $((elapsed%60))
     if [[ -n "$PUBLISHED_NAME" ]]; then
