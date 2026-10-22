@@ -83,7 +83,7 @@ usage() {
 Usage: ./$SCRIPT_NAME [eng|userdebug|user] [options]
 
   -d, --device NAME   target device (default: $DEVICE), e.g. lemonade, lemonadep
-  -g, --gms VARIANT   GMS variant (default: $GMS_VARIANT), e.g. core, gapps, vanilla, foss
+  -g, --gms VARIANT   GMS variant (default: $GMS_VARIANT): pico, core, gms|full, vanilla|va
   -f, --force         [MEMGUARD] retry on ANY failure, not just memory kills
       --sepolicy      [SEPOLICY] run the sepolicy check before the full build
       --sepolicy-only [SEPOLICY] run only the sepolicy check, then exit
@@ -165,6 +165,12 @@ if [[ -z "$BUILD_TYPE" && "$SEPOLICY_ONLY" -eq 0 ]]; then
 fi
 if [[ -n "$BUILD_TYPE" && ! "$BUILD_TYPE" =~ ^(eng|userdebug|user)$ ]]; then
     log "Error: invalid build type '$BUILD_TYPE'. Must be eng, userdebug, or user."
+    exit 1
+fi
+# The axion lunch function only recognizes these GMS tokens; anything else is
+# silently treated as a device name, so reject it here instead.
+if [[ -n "$GMS_VARIANT" && ! "$GMS_VARIANT" =~ ^(pico|core|gms|full|vanilla|va)$ ]]; then
+    log "Error: invalid GMS variant '$GMS_VARIANT'. Must be pico, core, gms, full, vanilla, or va."
     exit 1
 fi
 
