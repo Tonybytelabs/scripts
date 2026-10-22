@@ -20,7 +20,7 @@ WEB_ROOT="/var/www/html/tony"                             # nothing outside this
 
 DEVICE="lemonade"
 GMS_VARIANT="core"            # default GMS variant; override with -g/--gms
-DEFAULT_BUILD_TYPE="eng"
+DEFAULT_BUILD_TYPE="userdebug"
 JOBS="$(nproc)"
 
 # [SEPOLICY] targets. selinux_policy is the one confirmed working; sepolicy
