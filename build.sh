@@ -15,8 +15,11 @@
 # Config — edit these as needed. DOWNLOAD_BASE_URL in particular is expected
 # to change; it's kept at the top on its own so it's easy to find.
 # --------------------------------------------------------------------------
-DOWNLOAD_BASE_URL="https://ferrari.serverhive.in/tony"   # <- edit if it changes
-WEB_ROOT="/var/www/html/tony"                             # nothing outside this is ever touched
+# Web root + download URL derive from the server username (override by exporting
+# WEB_USER). Avoids a hardcoded folder that breaks when the account is renamed.
+WEB_USER="${WEB_USER:-$(id -un)}"
+DOWNLOAD_BASE_URL="https://ferrari.serverhive.in/${WEB_USER}"   # host is fixed; path follows the user
+WEB_ROOT="/var/www/html/${WEB_USER}"                            # nothing outside this is ever touched
 
 DEVICE="lemonade"
 GMS_VARIANT="core"            # default GMS variant; override with -g/--gms
@@ -393,7 +396,12 @@ publish_zip() {
     size="$(stat -c%s "$zip")"
     log_tagged PUBLISH "found $name ($(human_size "$size"))"
 
-    mkdir -p "$WEB_ROOT"
+    if ! mkdir -p "$WEB_ROOT" 2>/dev/null || [[ ! -w "$WEB_ROOT" ]]; then
+        log_tagged PUBLISH "Error: $WEB_ROOT is not writable by user '$WEB_USER'."
+        log_tagged PUBLISH "Fix once: sudo mkdir -p '$WEB_ROOT' && sudo chown '$WEB_USER' '$WEB_ROOT'"
+        log_tagged PUBLISH "Leaving $zip in place; nothing published."
+        return 1
+    fi
 
     avail_kb="$(df -Pk "$WEB_ROOT" | awk 'NR==2 {print $4}')"
     needed_kb=$(( size / 1024 * 110 / 100 ))
